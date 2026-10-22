@@ -1,0 +1,21 @@
+{
+  "name": "mrw-envios-sms-pwa",
+  "version": "1.0.0",
+  "description": "PWA de gestión de retiro de encomiendas y notificaciones SMS (MRW Envíos Venezuela)",
+  "main": "netlify/functions/send-sms.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node dev-server.js",
+    "test": "node test-sms.js && node test-qr.js"
+  },
+  "keywords": [
+    "mrw",
+    "pwa",
+    "sms",
+    "interconectados",
+    "venezuela",
+    "netlify-functions"
+  ],
+  "author": "MRW Envíos Venezuela",
+  "license": "MIT"
+}
