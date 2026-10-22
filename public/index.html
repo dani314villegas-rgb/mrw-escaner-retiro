@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>MRW | Envíos - Escáner de Retiro</title>
+  <meta name="description" content="PWA de alto rendimiento para gestión y notificación SMS de retiro de paquetes en agencias de envío en Venezuela (MRW Envíos).">
+  <meta name="theme-color" content="#c91424">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+  <!-- Tipografía Google Fonts Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@700;800&display=swap" rel="stylesheet">
+
+  <!-- Estilos Adaptativos Móvil / Desktop -->
+  <link rel="stylesheet" href="styles.css">
+
+  <!-- Librería html5-qrcode vía CDN -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+</head>
+<body>
+
+  <!-- Encabezado Corporativo -->
+  <header class="app-header">
+    <div class="header-container">
+      <div class="brand-group">
+        <div class="brand-badge">MRW</div>
+        <div class="brand-text">
+          <h1 class="brand-title">MRW | Envíos</h1>
+          <p class="brand-subtitle">Escáner de Retiro - AGENCIA VENEZUELA</p>
+        </div>
+      </div>
+
+      <div class="header-status">
+        <span class="sms-active-badge">
+          <span class="status-indicator"></span>
+          • SMS Activo
+        </span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Contenedor Principal Adaptativo -->
+  <main class="main-layout">
+
+    <!-- Tabs de Navegación -->
+    <nav class="tabs-nav" aria-label="Modo de Operación">
+      <button type="button" class="tab-btn active" id="tabScan">
+        <span>📷 Escáner QR</span>
+      </button>
+      <button type="button" class="tab-btn" id="tabManual">
+        <span>✍️ Carga Manual</span>
+      </button>
+    </nav>
+
+    <!-- Área Principal de Operación (2 Columnas en Desktop) -->
+    <div class="operation-grid">
+      
+      <!-- Columna 1: Área de Captura (Escáner o Formulario) -->
+      <section class="card capture-card" aria-label="Área de Captura">
+        
+        <!-- Sección Escáner QR -->
+        <div id="sectionScan" class="capture-section">
+          <div class="section-title-row">
+            <h2 class="section-title">Lector de Códigos QR</h2>
+            <span class="pulse-hint" id="scanStatusHint">Escaneando...</span>
+          </div>
+
+          <!-- Contenedor para html5-qrcode -->
+          <div class="scanner-container">
+            <div id="reader"></div>
+          </div>
+          <p class="helper-text">Apunta la cámara del dispositivo directamente al código QR del paquete.</p>
+        </div>
+
+        <!-- Sección Carga Manual -->
+        <div id="sectionManual" class="capture-section hidden">
+          <div class="section-title-row">
+            <h2 class="section-title">Registro Manual de Paquete</h2>
+          </div>
+
+          <form id="formManual" class="manual-form" autocomplete="off">
+            <div class="form-group">
+              <label for="inputTracking" class="form-label">Número de Guía / Tracking *</label>
+              <input 
+                type="text" 
+                id="inputTracking" 
+                name="tracking" 
+                class="form-input mono-font" 
+                placeholder="Ej. MRW-MAR-331201" 
+                required
+              >
+            </div>
+
+            <div class="form-group">
+              <label for="inputClientName" class="form-label">Nombre del Cliente / Destinatario *</label>
+              <input 
+                type="text" 
+                id="inputClientName" 
+                name="clientName" 
+                class="form-input" 
+                placeholder="Ej. José Gregorio Hernández" 
+                required
+              >
+            </div>
+
+            <div class="form-group">
+              <label for="inputPhone" class="form-label">Teléfono Móvil Venezuela *</label>
+              <input 
+                type="tel" 
+                id="inputPhone" 
+                name="phonenumber" 
+                class="form-input mono-font" 
+                placeholder="Ej. 04126901682 o 584126901682" 
+                pattern="^(04|584|\+584)(12|14|16|24|26)[0-9]{7}$"
+                title="Debe comenzar por 0412, 0414, 0416, 0424 o 0426 con 11 dígitos"
+                required
+              >
+              <span class="input-hint">Formatos aceptados: 04126901682 o 584126901682</span>
+            </div>
+
+            <button type="submit" class="btn btn-primary" id="btnManualSubmit">
+              <span>Cargar y Notificar Paquete</span>
+            </button>
+          </form>
+        </div>
+
+      </section>
+
+      <!-- Columna 2: Sección de Resultados (DATOS DEL PAQUETE DETECTADO) -->
+      <section class="card result-card" aria-label="Datos del Paquete">
+        <div class="card-header-row">
+          <h2 class="section-title">DATOS DEL PAQUETE DETECTADO</h2>
+          <span class="origin-badge" id="originBadge">Sin datos</span>
+        </div>
+
+        <!-- Banner de Estado de Envío -->
+        <div class="status-banner idle" id="statusBanner">
+          <span class="status-icon" id="statusIcon">📦</span>
+          <div class="status-content">
+            <strong id="statusTitle">Esperando lectura...</strong>
+            <p id="statusDesc">Escanea un código QR o ingresa los datos manualmente.</p>
+          </div>
+        </div>
+
+        <!-- Tarjetas de Campos Detectados -->
+        <div class="detected-grid">
+          <div class="detected-item full-width">
+            <span class="detected-label">Número de Guía / Tracking</span>
+            <div class="detected-val tracking-display" id="valTracking">— — —</div>
+          </div>
+
+          <div class="detected-item">
+            <span class="detected-label">Cliente / Destinatario</span>
+            <div class="detected-val" id="valClientName">— — —</div>
+          </div>
+
+          <div class="detected-item">
+            <span class="detected-label">Teléfono Notificado</span>
+            <div class="detected-val phone-display" id="valPhone">— — —</div>
+          </div>
+        </div>
+
+        <!-- Botón de Acción Principal -->
+        <div class="action-row">
+          <button type="button" class="btn btn-action" id="btnActionSend" disabled>
+            <span>✈️ Reintentar / Enviar SMS</span>
+          </button>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- Sección Simulador de Formatos QR -->
+    <section class="card simulator-card" aria-label="Simulador de Pruebas">
+      <div class="simulator-header">
+        <span class="simulator-title">⚡ PRUEBA RÁPIDA DE FORMATOS QR (SIMULADOR)</span>
+        <span class="simulator-subtitle">Prueba lecturas instantáneas sin requerir cámara física:</span>
+      </div>
+
+      <div class="chips-container">
+        <button type="button" class="chip-btn" id="btnSimJson" title="Probar Formato JSON">
+          📋 Formato JSON (Maria Perez)
+        </button>
+        <button type="button" class="chip-btn" id="btnSimPipe" title="Probar Formato Tubería">
+          ⚡ Formato Tubería (Carlos Mendoza)
+        </button>
+        <button type="button" class="chip-btn" id="btnSimComma" title="Probar Formato Coma">
+          🏷️ Formato Coma (José Hernández)
+        </button>
+      </div>
+    </section>
+
+    <!-- Sección Historial de Envíos -->
+    <section class="card history-card" aria-label="Últimos Paquetes Notificados">
+      <div class="history-title-row">
+        <h2 class="section-title">ÚLTIMOS PAQUETES NOTIFICADOS</h2>
+        <span class="history-count" id="historyCount">0 paquetes</span>
+      </div>
+
+      <div class="history-list-wrapper">
+        <ul class="history-items" id="historyList">
+          <!-- Elementos generados dinámicamente -->
+        </ul>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Pie de Página -->
+  <footer class="app-footer">
+    <p>MRW Envíos • Plataforma de Notificaciones de Agencia • Pasarela SMS Interconectados.net v3.2</p>
+  </footer>
+
+  <!-- Script Principal de la Aplicación -->
+  <script src="app.js"></script>
+</body>
+</html>
