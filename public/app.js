@@ -41,8 +41,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // Estado en Memoria
   let currentPackage = null;
   let isSending = false;
-  let qrScannerInstance = null;
-  let isScanningActive = false;
+  let html5QrCode = null;
+  let isStarting = false;
+  let isStopping = false;
 
   // Cargar Historial Persistente (mrw_sms_history)
   let historyData = [];
@@ -57,22 +58,20 @@ document.addEventListener('DOMContentLoaded', () => {
   // NAVEGACIÓN ENTRE TABS (Escáner QR / Carga Manual)
   // ==========================================================================
 
-  tabScan.addEventListener('click', () => {
+  tabScan.addEventListener('click', async () => {
     tabScan.classList.add('active');
     tabManual.classList.remove('active');
     sectionScan.classList.remove('hidden');
     sectionManual.classList.add('hidden');
-    if (!isScanningActive) {
-      startQrScanner();
-    }
+    await startScanner();
   });
 
-  tabManual.addEventListener('click', () => {
+  tabManual.addEventListener('click', async () => {
     tabManual.classList.add('active');
     tabScan.classList.remove('active');
     sectionManual.classList.remove('hidden');
     sectionScan.classList.add('hidden');
-    stopQrScanner();
+    await stopScanner();
   });
 
   // ==========================================================================
@@ -386,66 +385,122 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  function startQrScanner() {
-    if (typeof Html5Qrcode === 'undefined') {
-      scanStatusHint.textContent = 'Librería no cargada';
+  function renderScannerError(err) {
+    const reader = document.getElementById('reader');
+    if (!reader) return;
+
+    let errorDetail = 'No fue posible encender la cámara trasera. Por favor verifica los permisos del dispositivo.';
+
+    if (err) {
+      const errStr = (err.name || err.message || String(err)).toLowerCase();
+      if (errStr.includes('notallowed') || errStr.includes('permission') || errStr.includes('denied')) {
+        errorDetail = 'Permiso de cámara denegado. Concede acceso a la cámara en el navegador para escanear paquetes.';
+      } else if (errStr.includes('notfound') || errStr.includes('device') || errStr.includes('no camera')) {
+        errorDetail = 'No se detectó ninguna cámara disponible en tu dispositivo.';
+      } else if (errStr.includes('notreadable') || errStr.includes('track') || errStr.includes('in use')) {
+        errorDetail = 'La cámara está siendo ocupada por otra aplicación o pestaña del navegador.';
+      } else if (errStr.includes('overconstrained') || errStr.includes('constraint')) {
+        errorDetail = 'No se encontró una cámara trasera con el modo requerido (facingMode: environment).';
+      } else if (typeof err === 'string' && err.trim().length > 0) {
+        errorDetail = err;
+      } else if (err.message) {
+        errorDetail = err.message;
+      }
+    }
+
+    reader.innerHTML = `
+      <div class="scanner-error-box" style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem 1.5rem; text-align: center; color: #ffffff; background: #0f172a; border-radius: var(--radius-md); min-height: 260px;">
+        <div style="font-size: 2.2rem; margin-bottom: 0.6rem;">📷⚠️</div>
+        <h3 style="font-size: 1rem; font-weight: 800; color: #fee2e2; margin-bottom: 0.4rem;">
+          Acceso a Cámara no Disponible
+        </h3>
+        <p style="font-size: 0.82rem; color: #cbd5e1; max-width: 320px; margin-bottom: 1.2rem; line-height: 1.45;">
+          ${escapeHtml(errorDetail)}
+        </p>
+        <button type="button" id="btnRetryScan" class="btn btn-primary" style="padding: 0.65rem 1.3rem; font-size: 0.85rem; cursor: pointer;">
+          <span>🔄 Reintentar Acceso</span>
+        </button>
+      </div>
+    `;
+
+    const btnRetry = document.getElementById('btnRetryScan');
+    if (btnRetry) {
+      btnRetry.addEventListener('click', () => {
+        startScanner();
+      });
+    }
+  }
+
+  async function startScanner() {
+    if (isStarting) return;
+    if (sectionScan.classList.contains('hidden')) return;
+
+    if (html5QrCode && html5QrCode.isScanning) {
+      scanStatusHint.textContent = 'Cámara Activa';
       return;
     }
 
-    if (!qrScannerInstance) {
-      qrScannerInstance = new Html5Qrcode("reader");
-    }
+    isStarting = true;
+    scanStatusHint.textContent = 'Iniciando cámara...';
 
-    const config = {
-      fps: 15,
-      qrbox: { width: 220, height: 220 },
-      aspectRatio: 1.0
-    };
-
-    qrScannerInstance.start(
-      { facingMode: "environment" },
-      config,
-      onScanSuccess,
-      () => {
-        // Frames continuos sin QR
+    try {
+      if (typeof Html5Qrcode === 'undefined') {
+        throw new Error('La librería Html5Qrcode no está disponible en la página.');
       }
-    ).then(() => {
-      isScanningActive = true;
-      scanStatusHint.textContent = 'Cámara Activa';
-    }).catch(err => {
-      console.warn('No se pudo acceder a la cámara trasera directa, intentando selector general:', err);
-      // Fallback a primera cámara disponible
-      Html5Qrcode.getCameras().then(cameras => {
-        if (cameras && cameras.length) {
-          qrScannerInstance.start(
-            cameras[0].id,
-            config,
-            onScanSuccess,
-            () => {}
-          ).then(() => {
-            isScanningActive = true;
-            scanStatusHint.textContent = 'Cámara Activa';
-          }).catch(e => {
-            scanStatusHint.textContent = 'Permiso Requerido';
-          });
+
+      if (!html5QrCode) {
+        html5QrCode = new Html5Qrcode("reader");
+      }
+
+      const config = {
+        fps: 15,
+        qrbox: { width: 220, height: 220 },
+        aspectRatio: 1.0
+      };
+
+      await html5QrCode.start(
+        { facingMode: "environment" },
+        config,
+        onScanSuccess,
+        () => {
+          // Callback continuo de frames sin código QR detectado
         }
-      }).catch(() => {
-        scanStatusHint.textContent = 'Sin Permisos';
-      });
-    });
+      );
+
+      // Si el usuario cambió a la pestaña de carga manual durante la inicialización
+      if (sectionScan.classList.contains('hidden')) {
+        if (html5QrCode && html5QrCode.isScanning) {
+          await html5QrCode.stop();
+        }
+        return;
+      }
+
+      scanStatusHint.textContent = 'Cámara Activa';
+    } catch (err) {
+      console.warn('Error al iniciar el escáner con Html5Qrcode:', err);
+      scanStatusHint.textContent = 'Cámara no disponible';
+      renderScannerError(err);
+    } finally {
+      isStarting = false;
+    }
   }
 
-  function stopQrScanner() {
-    if (qrScannerInstance && isScanningActive) {
-      qrScannerInstance.stop().then(() => {
-        isScanningActive = false;
+  async function stopScanner() {
+    if (isStopping) return;
+    isStopping = true;
+
+    try {
+      if (html5QrCode && html5QrCode.isScanning) {
+        await html5QrCode.stop();
         scanStatusHint.textContent = 'En Pausa';
-      }).catch(e => {
-        console.warn('Error al detener escáner:', e);
-      });
+      }
+    } catch (err) {
+      console.warn('Error al detener escáner:', err);
+    } finally {
+      isStopping = false;
     }
   }
 
   // Iniciar escáner al cargar la app
-  startQrScanner();
+  startScanner();
 });
